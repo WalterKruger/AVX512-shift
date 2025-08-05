@@ -1,6 +1,55 @@
 # Variable 8-bit shifts
 Despite how well bit shift operations are support with AVX-512, it still lacks any 8-bit granular shifts. This repository aims to fill that gap by providing the most efficient implementations for all shift types, in which the amount being shifted is specified by the corresponding element. These implementations make heavy use of the many powerful AVX-512 instructions for the best performance.
 
+
+# Amounts greater than the element size
+Each implementation has different behaviors when the shift amount is greater or equal to the element size. Some algorithms require a specific overflow behavior, so it may be beneficial to choose the implementation based on that. Below is a list of behaviors exhibited when that occur:
+
+- **Modular**: The shift amount is modulo the element size. E.g. `x << 12 = x << 4`
+- **Saturating**: The source bits can be completely shifted away. Logical shifts zero the result, arithmetic shift completely fill the output with the sign.
+- **Garbage**: The result is set to an unusual or non-sensical value.
+
+Note that some implementations have multiple behavior at once, like saturating mod 16.
+
+# Implementation comparison
+
+## Logical left
+| Name  | Instructions | Constants | Overflow | Perf |
+| - | :-: | :-: | - | - |
+| gfmul | 4 | 2 | Modular | 12.63 |
+| via16 | 6 | 1 | Saturation | 12.62 |
+
+## Logical right
+| Name  | Instructions | Constants | Overflow | Perf |
+| - | :-: | :-: | - | - |
+| multishift | 4 | 3 | Modular | 12.77 |
+| via16 | 6 | 1 | Saturation | 12.75 |
+| revLeft | 6 | 2 | Saturation | 13.63 |
+
+## Arithmetic right
+| Name  | Instructions | Constants | Overflow | Perf |
+| - | :-: | :-: | - | - |
+| multi | 5 | 3 | Modular | 12.65 |
+| via16LUT | 7 | 1+mmask | Sat % 16 | 14.74 |
+| 16SignExt | 6 | 2 | Saturation | 12.66 |
+| 2multi | 5 | 3+mmask | Modular | 12.64 |
+
+## Rotation left
+| Name  | Instructions | Constants | Overflow | Perf |
+| - | :-: | :-: | - | - |
+| leftRight | 7 | 3 | Garbage | 14.77 |
+| bitByBit | 6 | 5 | Modular | 16.87 |
+| via16 | 6 | 2+mmask | Modular | 12.66 |
+
+## Rotation right
+| Name  | Instructions | Constants | Overflow | Perf |
+| - | :-: | :-: | - | - |
+| bitByBit | 6 | 6 | Modular | 19.14 |
+| 2multi | 5 | 4+mmask | Modular | 12.72 |
+| via16 | 6 | 2+mmask | Modular | 12.71 |
+
+
+
 # Specific useful intrinsics
 ## `gf2p8mul`
 Multiplying values by a power of two is equivalent to a bit shift. Unfortunately, there is no low multiplication intrinsic that perform an `8 * 8` => 8-bit like `_mm_mullo_epi16`. However, it does provide an 8-bit finite field multiplication which performs a full carryless multiplication then reduces it to 8-bits.
